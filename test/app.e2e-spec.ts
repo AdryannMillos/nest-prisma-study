@@ -1,7 +1,10 @@
 import { Test } from '@nestjs/testing';
+import * as pactum from 'pactum';
 import { AppModule } from '../src/app.module';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { AuthDto } from 'src/auth/dto';
+import { UserDto } from 'src/user/dto';
 
 describe('App e2e', () => {
   let app: INestApplication;
@@ -14,10 +17,12 @@ describe('App e2e', () => {
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
     await app.init();
+    await app.listen(3399);
 
     prisma = app.get(PrismaService);
 
     await prisma.cleanDb();
+    pactum.request.setBaseUrl('http://localhost:3399');
   });
 
   afterAll(async () => {
@@ -25,18 +30,105 @@ describe('App e2e', () => {
   });
 
   describe('Auth', () => {
+    const dto: AuthDto = {
+      email: 'teste@teste.com',
+      password: '123456',
+    };
     describe('signup', () => {
-      it.todo('should create a new user');
+      it('should throw if email is empty', () => {
+        return pactum
+          .spec()
+          .post('/auth/signup')
+          .withBody({ password: '123456' })
+          .expectStatus(400);
+      });
+      it('should throw if password is empty', () => {
+        return pactum
+          .spec()
+          .post('/auth/signup')
+          .withBody({ email: 'teste@teste.com' })
+          .expectStatus(400);
+      });
+      it('should throw if no body provided', () => {
+        return pactum
+          .spec()
+          .post('/auth/signup')
+          .withBody({})
+          .expectStatus(400);
+      });
+      it('should create a new user', () => {
+        return pactum
+          .spec()
+          .post('/auth/signup')
+          .withBody(dto)
+          .expectStatus(201);
+      });
     });
 
-    describe('signin', () => {});
+    describe('signin', () => {
+      it('should throw if email is empty', () => {
+        return pactum
+          .spec()
+          .post('/auth/signin')
+          .withBody({ password: '123456' })
+          .expectStatus(400);
+      });
+      it('should throw if password is empty', () => {
+        return pactum
+          .spec()
+          .post('/auth/signin')
+          .withBody({ email: 'teste@teste.com' })
+          .expectStatus(400);
+      });
+      it('should throw if no body provided', () => {
+        return pactum
+          .spec()
+          .post('/auth/signin')
+          .withBody({})
+          .expectStatus(400);
+      });
+      it('should signin', () => {
+        return pactum
+          .spec()
+          .post('/auth/signin')
+          .withBody(dto)
+          .expectStatus(200)
+          .stores('userAt', 'access_token');
+      });
+    });
   });
 
   describe('User', () => {
+    const dto: UserDto = {
+      email: 'teste@teste.com',
+      firstName: 'Teste',
+      lastName: 'Teste',
+    };
     describe('Get current user', () => {
+      it('should get current user', () => {
+        return pactum
+          .spec()
+          .get('/users/list')
+          .withHeaders({
+            Authorization: `Bearer $S{userAt}`,
+          })
+          .expectStatus(200);
+      });
     });
 
-    describe('Edit user', () => {});
+    describe('Edit user', () => {
+      it('should edit current user', () => {
+        return pactum
+          .spec()
+          .patch('/users/edit')
+          .withBody(dto)
+          .withHeaders({
+            Authorization: `Bearer $S{userAt}`,
+          })
+          .expectStatus(200)
+          .expectBodyContains(dto.firstName);
+      });
+    });
   });
 
   describe('Bookmark', () => {
@@ -46,8 +138,8 @@ describe('App e2e', () => {
 
     describe('Get bookmark by id', () => {});
 
-    describe('Edit bookmark', () => {});
+    describe('Edit bookmark by id', () => {});
 
-    describe('Delete bookmark', () => {});
+    describe('Delete bookmark by id', () => {});
   });
 });
